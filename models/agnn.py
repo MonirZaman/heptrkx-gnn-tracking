@@ -33,10 +33,6 @@ class EdgeNetwork(nn.Module):
     def forward(self, x, edge_index):
         # Select the features of the associated nodes
         start, end = edge_index
-        print("x")
-        print(len(x))
-        print(x)
-        print(edge_index, start, end)
         x1, x2 = x[start], x[end]
         edge_inputs = torch.cat([x[start], x[end]], dim=1)
         return self.network(edge_inputs).squeeze(-1)
@@ -105,35 +101,22 @@ class GNNSegmentClassifier(nn.Module):
         node_network = NodeNetwork(self.input_dim + self.hidden_dim, self.hidden_dim,
                                     self.hidden_activation, layer_norm=self.layer_norm)
         
-        print("before input network")
-        print("len(inputs.x) ", len(inputs.x))
-
         # Apply input network to get hidden representation
         x = input_network(inputs.x)
         
-        print("after input net ", len(x), len(inputs.x))
-
-
-
         # Shortcut connect the inputs onto the hidden representation
         x = torch.cat([x, inputs.x], dim=-1)
         
-        print("after cat ",len(x), len(inputs.x))
-
         # Loop over iterations of edge and node networks
         for i in range(self.n_graph_iters):
             # Apply edge network
             e = torch.sigmoid(edge_network(x, inputs.edge_index))
             
-            print("after edge network ", len(x), len(inputs.x))
-
             # Apply node network
             x = node_network(x, e, inputs.edge_index)
-            print("after node network ", len(x), len(inputs.x))
             
             # Shortcut connect the inputs onto the hidden representation
             x = torch.cat([x, inputs.x], dim=-1)
-            print("after cat ", len(x), len(inputs.x))
         
         return x
 
@@ -141,13 +124,13 @@ class GNNSegmentClassifier(nn.Module):
 
         heads = []
         num_heads = 2
-        for nh in range(num_heads):
-            heads.append(self.get_attention_score(inputs)) 
+        attn = self.get_attention_score(inputs)
+        for i in range(num_heads - 1): 
+            cur_attn = self.get_attention_score(inputs) 
+            attn = attn.add(cur_attn)
 
-        print(heads)
-        x = torch.mean(torch.stack(heads))
-        print("after mean ")
-        print(len(x))
+        x = attn.div(num_heads)
+
         return self.edge_network(x, inputs.edge_index)
 
     def forward_l(self, inputs):
